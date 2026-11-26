@@ -213,6 +213,11 @@ def capa_subtitulo(texto):
 
 # ----------------------------------------------------------------------------- video
 
+def ruta_portada(video):
+    """Dónde queda la imagen de portada del reel."""
+    return os.path.splitext(video)[0] + "_portada.jpg"
+
+
 def render_reel(laminas, partes_guion, salida):
     """laminas: rutas de las láminas en orden. partes_guion: un texto por lámina.
     Devuelve (ruta, duración en segundos)."""
@@ -264,6 +269,11 @@ def render_reel(laminas, partes_guion, salida):
             bx = (g.width - vw) / 2
             by = (g.height - vh) / 2
             return g.resize((LAM_W, LAM_H), Image.BILINEAR, box=(bx, by, bx + vw, by + vh))
+
+        # Portada limpia del reel (primer cuadro, sin subtítulo), para que Facebook no escoja un cuadro cualquiera
+        portada = fondo.copy()
+        portada.paste(cuadro_lamina(0, 0.0), (LAM_X, LAM_Y), mascara)
+        portada.save(ruta_portada(salida), quality=92)
 
         for i in range(n_frames):
             t = i / FPS
