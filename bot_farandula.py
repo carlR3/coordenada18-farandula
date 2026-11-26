@@ -101,6 +101,15 @@ HORAS_VENTANA = 20       # historias de las últimas X horas (si el medio trae h
 DIAS_HISTORIAL = 10
 LIMITE_SEGUNDOS = 14 * 60  # después de esto no empieza otra historia (GitHub corta a los 25 min)
 MARCA = "Coordenada 18 Farándula"
+
+MOTIVOS = {}     # por qué se descartó cada historia en esta ronda (para el aviso de Telegram)
+FALLIDOS = []    # medios que no respondieron en esta ronda
+LEIDOS = set()   # medios que sí respondieron
+
+
+def contar(motivo):
+    MOTIVOS[motivo] = MOTIVOS.get(motivo, 0) + 1
+
 ETIQUETA = "#Coordenada18Farandula"
 CIERRE = "Sigue a Coordenada 18 Farándula."
 LIMITE_PIE = 1024  # Telegram no acepta más en el texto de una foto
@@ -280,7 +289,9 @@ def leer_medios(urls_publicadas):
             fallo = "sin titulares"
         if not entradas:
             log(f"  {medio} ({urls[0].split('/')[2]}): no se pudo leer ({fallo})")
+            FALLIDOS.append(medio)
             continue
+        LEIDOS.add(medio)
         fechas = [_fecha(e) for e in entradas]
         horas_utiles = len({f for f in fechas if f}) > 2  # algunos medios ponen la misma hora a todo
         n = 0
@@ -338,7 +349,7 @@ def seleccionar(items, historial, cantidad):
         "Titulares recientes (id | medio | hora RD | titular):\n" + "\n".join(lineas) + "\n\n"
         "Historias ya publicadas en los últimos 3 días (no las repitas, ni con otro enfoque):\n"
         + ("\n".join(f"- {t}" for t in temas) if temas else "(ninguna)") + "\n\n"
-        f"Escoge hasta {cantidad + 4} historias de FARÁNDULA, ordenadas de la más viral a la menos. Reglas:\n"
+        f"Escoge hasta {cantidad + 7} historias de FARÁNDULA, ordenadas de la más viral a la menos. Reglas:\n"
         "- Solo farándula y entretenimiento: artistas, cantantes, actores, presentadores, influencers, "
         "realities, premios, conciertos, lanzamientos, romances o rupturas confirmados, declaraciones "
         "polémicas, peleas públicas entre famosos, y la vida pública de deportistas famosos. "
@@ -369,6 +380,7 @@ def seleccionar(items, historial, cantidad):
         medios = {g["medio"].lower() for g in grupo}
         directos = [g for g in grupo if g["directo"]]
         if len(medios) < 2 or not directos:
+            contar("solo salió en 1 medio")
             continue
         cat = str(n.get("categoria", "FARÁNDULA RD")).upper()
         elegidas.append({"tema": n.get("tema", directos[0]["titulo"]), "grupo": grupo,
@@ -459,7 +471,7 @@ def buscar_foto(candidatas, titular, destino, usadas):
     """candidatas: (url_imagen, medio, url_articulo). Devuelve (ruta, foco, medio, url, huella) o Nones."""
     vistas, revisadas = set(), 0
     for url, medio, referer in candidatas:
-        if not url or url in vistas or revisadas >= 4:
+        if not url or url in vistas or revisadas >= 6:
             continue
         vistas.add(url)
         if url in usadas["urls"]:
@@ -928,6 +940,9 @@ def ronda(cantidad, sin_enviar=False):
     historial = cargar_historial()
     urls_publicadas = {u for h in historial for u in h.get("urls", [])}
 
+    MOTIVOS.clear()
+    FALLIDOS.clear()
+    LEIDOS.clear()
     log("Leyendo medios…")
     items = leer_medios(urls_publicadas)
     if not any(i["directo"] for i in items):
@@ -956,6 +971,7 @@ def ronda(cantidad, sin_enviar=False):
         articulos = [{**g, **art} for g, art in zip(directos, leidos)]
         if not any(len(a["texto"]) >= 250 for a in articulos):
             log("    sin texto suficiente, se salta")
+            contar("no se pudo leer el artículo")
             continue
 
         n = len(hechas) + 1
@@ -965,6 +981,7 @@ def ronda(cantidad, sin_enviar=False):
             fotos, directos[0]["titulo"], os.path.join(SALIDA, f"foto{n}.jpg"), usadas)
         if not ruta_foto:
             log("    sin foto limpia (o solo fotos ya usadas), se salta")
+            contar("sin foto limpia")
             continue
         usadas["urls"].add(url_foto)
         usadas["huellas"].add(huella_foto)
@@ -974,6 +991,7 @@ def ronda(cantidad, sin_enviar=False):
             nota = redactar(historia, articulos)
         except ErrorGemini as e:
             log(f"    no se pudo redactar: {e}")
+            contar("Gemini no pudo redactarla")
             continue
 
         carpeta = os.path.join(SALIDA, f"carrusel{n}")
@@ -1008,9 +1026,16 @@ def ronda(cantidad, sin_enviar=False):
         guardar_historial(historial)
 
     if not hechas and not sin_enviar:
+        directos = sum(1 for i in items if i["directo"])
+        detalle = "\n".join(f"• {k}: {v}" for k, v in sorted(MOTIVOS.items(), key=lambda x: -x[1]))
+        caidos = [m for m in dict.fromkeys(FALLIDOS) if m not in LEIDOS]
+        caidos = f" No respondieron {len(caidos)} medios: {', '.join(caidos)}." if caidos else ""
         tg("sendMessage", data={"chat_id": cid, "text":
             f"{MARCA} · ronda de las {ahora_rd().strftime('%I:%M %p')}: no encontré una historia nueva "
-            "confirmada en 2 medios y con foto limpia. Pruebo otra vez en la próxima ronda."})
+            "confirmada en 2 medios y con foto limpia. Pruebo otra vez en la próxima ronda.\n\n"
+            f"Leí {directos} titulares nuevos.{caidos}"
+            + (f"\n\nHistorias descartadas y por qué:\n{detalle}" if detalle else
+               "\n\nEntre esos titulares no había farándula nueva que no se haya publicado ya.")})
     log(f"\nListo: {len(hechas)} carrusel(es) en {time.time() - inicio:.0f} s.")
     return hechas
 
