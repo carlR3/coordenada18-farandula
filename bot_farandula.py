@@ -802,19 +802,42 @@ def _rupload(url, datos):
         raise RuntimeError(f"Meta no recibió el video: {detalle}")
 
 
-def publicar_facebook_reel(video, texto):
+def poner_portada_facebook(vid, portada, intentos=6, pausa=20):
+    """Le pone al reel de Facebook la portada del carrusel. Si no, Facebook escoge un cuadro cualquiera."""
+    ultimo = None
+    for _ in range(intentos):
+        try:
+            with open(portada, "rb") as f:
+                graph("POST", f"{vid}/thumbnails", params={"is_preferred": "true"},
+                      files={"source": ("portada.jpg", f.read(), "image/jpeg")})
+            log("  portada del reel de Facebook puesta")
+            return True
+        except (RuntimeError, OSError) as e:
+            ultimo = e
+            time.sleep(pausa)  # el video puede estar procesándose todavía
+    log(f"  no se pudo poner la portada del reel de Facebook ({ultimo})")
+    return False
+
+
+def publicar_facebook_reel(video, texto, portada=None):
     page, _ = ids_meta()
+    portada = portada if portada and os.path.exists(portada) else None
     try:
         ini = graph("POST", f"{page}/video_reels", params={"upload_phase": "start"})
         vid = ini["video_id"]
         _rupload(ini.get("upload_url") or f"https://rupload.facebook.com/video-upload/v27.0/{vid}", video)
         graph("POST", f"{page}/video_reels", params={
             "upload_phase": "finish", "video_id": vid, "video_state": "PUBLISHED", "description": texto})
+        if portada:
+            poner_portada_facebook(vid, portada)
         return f"https://www.facebook.com/reel/{vid}"
     except RuntimeError as e:
         log(f"  reel de Facebook falló ({e}); se intenta como video normal")
-        d = graph("POST", f"{page}/videos", params={"description": texto},
-                  files={"source": ("farandula.mp4", video, "video/mp4")})
+        archivos = {"source": ("farandula.mp4", video, "video/mp4")}
+        if portada:
+            with open(portada, "rb") as f:
+                archivos["thumb"] = ("portada.jpg", f.read(), "image/jpeg")
+        d = graph("POST", f"{page}/videos", params={"description": texto}, files=archivos)
         return f"https://www.facebook.com/{page}/videos/{d['id']}"
 
 
@@ -887,7 +910,8 @@ def publicar(laminas, video, texto, historial):
                 lineas.append(f"⚠️ Reel en Instagram no salió: {str(e)[:250]}")
         if reels_fb < LIMITE_REELS_FB - 1:
             try:
-                lineas.append(f"🎬 Reel en Facebook: {publicar_facebook_reel(datos, texto)}")
+                portada = f18_video.ruta_portada(video)
+                lineas.append(f"🎬 Reel en Facebook: {publicar_facebook_reel(datos, texto, portada)}")
                 info["fb_reel"] = True
             except Exception as e:  # noqa: BLE001
                 log(f"  reel en Facebook falló: {e}")
