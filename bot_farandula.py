@@ -165,6 +165,13 @@ def _extraer_json(texto):
         return json.loads(m.group(0))
 
 
+def como_objeto(d):
+    """Gemini a veces devuelve [ {...} ] en vez de {...}: se toma el primer objeto."""
+    if isinstance(d, list):
+        d = next((x for x in d if isinstance(x, dict)), {})
+    return d if isinstance(d, dict) else {}
+
+
 def _modelos(rapido):
     preferido = os.getenv("GEMINI_MODEL", "").strip()
     lista = MODELOS_LITE if rapido else MODELOS_FLASH
@@ -352,8 +359,11 @@ def seleccionar(items, historial, cantidad):
         '"triste": true si es una muerte o algo doloroso (si no, false)}]}'
     )
     datos = gemini(prompt, sistema=SISTEMA_EDITOR, temperatura=0.3)
+    lista = datos if isinstance(datos, list) else datos.get("historias", []) if isinstance(datos, dict) else []
     elegidas = []
-    for n in datos.get("historias", []):
+    for n in lista:
+        if not isinstance(n, dict):
+            continue
         ids = list(dict.fromkeys(i for i in n.get("ids", []) if isinstance(i, int) and 0 <= i < len(items)))
         grupo = [items[i] for i in ids]
         medios = {g["medio"].lower() for g in grupo}
@@ -419,7 +429,7 @@ def revisar_foto(img, titular):
         '"foco_x": número de 0 a 1 (posición horizontal de la cara o sujeto principal),\n'
         '"foco_y": número de 0 a 1 (posición vertical de la cara o sujeto principal)}'
     )
-    d = gemini(prompt, imagen_jpg=buf.getvalue(), temperatura=0.0, rapido=True)
+    d = como_objeto(gemini(prompt, imagen_jpg=buf.getvalue(), temperatura=0.0, rapido=True))
     problemas = [k for k in ("logo_o_marca_de_agua", "texto_encima", "es_arte_o_montaje",
                              "menor_identificable", "desnudo_o_sugerente", "contenido_grafico") if d.get(k)]
     if not d.get("relacionada", True):
@@ -551,7 +561,7 @@ def redactar(historia, articulos):
     prompt = (f"Hora actual en RD: {ahora_rd().strftime('%d/%m/%Y %I:%M %p')}.\n"
               f"Categoría sugerida: {historia['categoria']}.\n"
               f"Historia triste: {'sí' if historia.get('triste') else 'no'}.\n\nFuentes:\n\n" + "\n\n".join(fuentes))
-    d = gemini(prompt, sistema=SISTEMA_REDACCION, temperatura=0.7)
+    d = como_objeto(gemini(prompt, sistema=SISTEMA_REDACCION, temperatura=0.7))
 
     laminas = []
     for l in d.get("laminas", [])[:5]:
