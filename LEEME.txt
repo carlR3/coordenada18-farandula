@@ -1,0 +1,32 @@
+COORDENADA 18 FARÁNDULA — bot de carruseles
+
+QUÉ HACE (3 veces al día: 9:17 a. m., 2:23 p. m. y 8:41 p. m., hora de RD)
+1. Lee las secciones de farándula de los medios de RD y de fuera.
+2. Escoge la historia más caliente que salga en al menos 2 medios y que no se haya publicado.
+3. Busca una foto limpia (sin marcas de agua, sin texto encima, sin menores).
+4. Escribe el carrusel (portada, 3 a 5 láminas, cierre con pregunta) con tono picante, sin inventar.
+5. Arma las láminas y un Reel con las mismas láminas y la voz de Ramona.
+6. Publica el carrusel y el Reel en Instagram y en la página de Facebook.
+7. Te manda a Telegram las láminas, el Reel y los enlaces (o el motivo si algo falla).
+
+ARCHIVOS
+- bot_farandula.py: el bot.
+- f18_render.py: el diseño de las láminas.
+- f18_video.py: el Reel.
+- c18_render.py, c18_fonts/, logo_c18.png: letras y logo.
+- requirements.txt: lo que hay que instalar.
+- .github/workflows/farandula.yml: el horario (créalo a mano en GitHub si no se sube).
+- estado/: historial para no repetir historias (lo llena el bot).
+
+SECRETOS (Settings → Secrets and variables → Actions → New repository secret)
+- GEMINI_API_KEY: la misma clave de Gemini de Coordenada 18.
+- TELEGRAM_TOKEN: el mismo token del bot de Telegram de Coordenada 18.
+- TELEGRAM_CHAT_ID: tu número de chat (está en estado/chat_id.txt del repositorio de Coordenada 18).
+- META_PAGE_TOKEN: el token de la página de Facebook de Coordenada 18 Farándula.
+
+CAMBIOS FÁCILES (Settings → Secrets and variables → Actions → pestaña Variables)
+- VOZ = es-DO-EmilioNeural  → los Reels salen con la voz de Emilio en vez de Ramona.
+- Para cambiar las horas, edita las líneas "cron" de .github/workflows/farandula.yml.
+
+PROBAR A MANO
+Actions → Ronda de farándula → Run workflow.
